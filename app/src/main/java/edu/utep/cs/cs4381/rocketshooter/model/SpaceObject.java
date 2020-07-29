@@ -2,7 +2,7 @@ package edu.utep.cs.cs4381.rocketshooter.model;
 
 import java.util.Random;
 
-public class SpaceObject {
+public abstract class SpaceObject {
 
     protected int x;
     protected int y;
@@ -15,6 +15,8 @@ public class SpaceObject {
     protected int MAX_Y;
 
     public int width, height;
+
+    protected boolean isActive = true;
 
     protected static final Random random = new Random();
 
@@ -42,19 +44,14 @@ public class SpaceObject {
         return speed;
     }
 
+    public void setActive(boolean active) {
+        isActive = active;
+        x = -height * 2;
+    }
 
     /**
      * Updates the y-coordinate and speed of the object.
      */
-    public void update() {
-        y += speed;
-
-        // Reset position of object
-        if (y > MAX_Y) {
-            speed = random.nextInt(10) + 10;
-            x = random.nextInt(MAX_X);
-            y = -height;
-        }
-    }
+    public abstract void update();
 
 }

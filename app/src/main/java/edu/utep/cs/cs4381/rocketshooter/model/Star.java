@@ -7,6 +7,13 @@ public class Star extends SpaceObject {
     }
 
     public void update() {
-        super.update();
+        y += speed;
+
+        // Reset position of object
+        if (y > MAX_Y) {
+            speed = random.nextInt(10) + 10;
+            x = random.nextInt(MAX_X);
+            y = -height;
+        }
     }
 }

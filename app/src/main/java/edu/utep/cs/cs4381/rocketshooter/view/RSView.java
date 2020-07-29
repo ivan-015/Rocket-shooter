@@ -16,6 +16,7 @@ import java.util.Random;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import edu.utep.cs.cs4381.rocketshooter.model.Barrier;
+import edu.utep.cs.cs4381.rocketshooter.model.Bullet;
 import edu.utep.cs.cs4381.rocketshooter.model.Enemy;
 import edu.utep.cs.cs4381.rocketshooter.model.PlayerShip;
 import edu.utep.cs.cs4381.rocketshooter.model.Star;
@@ -75,7 +76,7 @@ public class RSView extends SurfaceView implements Runnable {
         stars.clear();
 
 
-        player = new PlayerShip(screenWidth / 2 - 50, (int) LEFT_BUTTON.top - 50, screenWidth, screenHeight);
+        player = new PlayerShip(screenWidth / 2 - 100, (int) LEFT_BUTTON.top - 50, screenWidth, screenHeight);
 
         //Create enemies
         for (int col = 0; col < 4; col++) {
@@ -163,6 +164,44 @@ public class RSView extends SurfaceView implements Runnable {
             for (Enemy enemy : enemies) {
                 enemy.update();
             }
+            for (Barrier barrier : barriers) {
+                barrier.update();
+            }
+
+            // Check if player hit barrier or enemy
+            for (Bullet bullet : player.getBullets()) {
+                for (Barrier barrier : barriers) {
+                    if (bullet.getHitbox().intersects(barrier.getHitbox())) {
+                        bullet.hideBullet();
+                        barrier.setActive(false);
+                    }
+                }
+                for (Enemy enemy : enemies) {
+                    if (bullet.getHitbox().intersects(enemy.getHitbox())) {
+                        bullet.hideBullet();
+                        enemy.setActive(false);
+                    }
+                }
+
+            }
+
+            // Check if enemy hit barrier or enemy
+            for (Enemy enemy : enemies) {
+                for (Bullet bullet : enemy.getBullets()) {
+                    for (Barrier barrier : barriers) {
+                        if (bullet.getHitbox().intersects(barrier.getHitbox())) {
+                            barrier.setActive(false);
+                            bullet.hideBullet();
+                        }
+                    }
+                    if (bullet.getHitbox().intersects(player.getHitbox())) {
+                        player.takeLife();
+                    }
+                }
+            }
+        }
+        if (player.getLives() <= 0) {
+            isGameOver = true;
         }
     }
 
@@ -190,8 +229,30 @@ public class RSView extends SurfaceView implements Runnable {
 
             drawButtons();
 
+            drawHUD();
+
+            drawBullets();
+
             holder.unlockCanvasAndPost(canvas);
         }
+    }
+
+    private void drawBullets() {
+        List<Bullet> bullets = player.getBullets();
+        for (Bullet bullet : bullets) {
+            paint.setColor(Color.BLUE);
+            canvas.drawRect(bullet.getX(), bullet.getY(), bullet.getX() + 10, bullet.getY() + 10, paint);
+        }
+    }
+
+    private void drawHUD() {
+        paint.setColor(Color.WHITE);
+        paint.setTextSize(60);
+
+        paint.setTextAlign(Paint.Align.RIGHT);
+        canvas.drawText("Lives:  " + player.getLives(), screenWidth - 50, 75, paint);
+        paint.setTextAlign(Paint.Align.LEFT);
+        canvas.drawText("Score:  0", 50, 75, paint);
     }
 
     private void drawButtons() {
@@ -220,7 +281,7 @@ public class RSView extends SurfaceView implements Runnable {
         canvas.drawRect(player.getX() + squareSize, player.getY() + squareSize,
                 player.getX() + squareSize * 4, player.getY() + squareSize * 4, paint);
 
-        // Ship shooter (on top of ship core)
+        // Ship cannon (on top of ship core)
         canvas.drawRect(player.getX() + squareSize * 2, player.getY(),
                 player.getX() + squareSize * 3, player.getY() + squareSize, paint);
 
@@ -293,7 +354,7 @@ public class RSView extends SurfaceView implements Runnable {
             case MotionEvent.ACTION_DOWN:
 //                detectLeftRightButton(event.getX(), event.getY());
                 if (!detectLeftRightButton(event.getX(), event.getY())) {
-                    player.shoot();
+                    player.shoot(Bullet.UP);
                 }
                 break;
             case MotionEvent.ACTION_UP:
