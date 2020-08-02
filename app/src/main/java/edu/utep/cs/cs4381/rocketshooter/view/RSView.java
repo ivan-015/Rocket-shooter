@@ -4,6 +4,8 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.Point;
 import android.graphics.RectF;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
@@ -50,6 +52,11 @@ public class RSView extends SurfaceView implements Runnable {
     private RectF LEFT_BUTTON;
     private RectF RIGHT_BUTTON;
 
+    /// Top Left Corner coordinates for the pause button
+    private Point PAUSE_TLC;
+    /// Bottom Right Corner coordinates for the pause button
+    private Point PAUSE_BRC;
+
     /// Number of enemies that are alive
     private int activeEnemies;
     /// Number of enemy rows and columns
@@ -84,6 +91,9 @@ public class RSView extends SurfaceView implements Runnable {
 
         LEFT_BUTTON = new RectF(10, screenHeight * .86f, screenWidth * .32f, screenHeight - 80);
         RIGHT_BUTTON = new RectF(screenWidth - (screenWidth * .32f), screenHeight * .86f, screenWidth - 10, screenHeight - 80);
+
+        PAUSE_TLC = new Point(screenWidth / 2 - 50, 50);
+        PAUSE_BRC = new Point(screenWidth / 2 + 50, 150);
 
         start();
     }
@@ -323,6 +333,12 @@ public class RSView extends SurfaceView implements Runnable {
 
             drawHUD();
 
+            if (!isGameOver) {
+                drawPauseButton();
+            }
+            if (!isRunning) {
+                drawPauseMenu();
+            }
 
             // draw winning menu for player
             if (playerWon) {
@@ -340,6 +356,40 @@ public class RSView extends SurfaceView implements Runnable {
             holder.unlockCanvasAndPost(canvas);
         }
     }
+
+    private void drawPauseButton() {
+        paint.setAlpha(100);
+        canvas.drawOval(PAUSE_TLC.x, PAUSE_TLC.y, PAUSE_BRC.x, PAUSE_BRC.y, paint);
+
+        paint.setAlpha(150);
+        int PAUSE_TOP = PAUSE_TLC.y + 20;
+        int PAUSE_BOTTOM = PAUSE_BRC.y - 20;
+        // Draw Pause Button
+        if (isRunning) {
+
+            canvas.drawRect(PAUSE_TLC.x + 20, PAUSE_TOP, PAUSE_BRC.x - 60, PAUSE_BOTTOM, paint);
+            canvas.drawRect(PAUSE_TLC.x + 60, PAUSE_TOP, PAUSE_BRC.x - 20, PAUSE_BOTTOM, paint);
+        }
+        // Draw play button
+        else {
+            Point a = new Point(PAUSE_TLC.x + 30, PAUSE_TOP);
+            Point b = new Point(PAUSE_TLC.x + 30, PAUSE_BOTTOM);
+            Point c = new Point(PAUSE_BRC.x - 20, (PAUSE_BOTTOM + PAUSE_TOP) / 2);
+
+            Path path = new Path();
+            path.setFillType(Path.FillType.EVEN_ODD);
+            path.moveTo(a.x, a.y);
+            path.lineTo(b.x, b.y);
+            path.lineTo(c.x, c.y);
+            path.lineTo(a.x, a.y);
+            path.close();
+
+            canvas.drawPath(path, paint);
+        }
+
+        paint.setAlpha(255);
+    }
+
 
     // Draws instructions for the player's first playthrough
     private void drawWelcome() {
@@ -490,6 +540,13 @@ public class RSView extends SurfaceView implements Runnable {
         }
     }
 
+    private void drawPauseMenu() {
+        paint.setColor(Color.WHITE);
+        paint.setTextAlign(Paint.Align.CENTER);
+        paint.setTextSize(80);
+        canvas.drawText("Paused!", getWidth() / 2, getHeight() / 2, paint);
+    }
+
     private void drawBarriers() {
 
         for (Barrier b : barriers) {
@@ -533,7 +590,14 @@ public class RSView extends SurfaceView implements Runnable {
     public boolean onTouchEvent(MotionEvent event) {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
-//                detectLeftRightButton(event.getX(), event.getY());
+
+                if (pressedPause(event.getX(), event.getY())) {
+                    if (isRunning) {
+                        pause();
+                    } else {
+                        resume();
+                    }
+                }
                 if (!detectLeftRightButton(event.getX(), event.getY()) && !isGameOver) {
                     if (player.shoot(Bullet.UP)) {
                         SoundPlayer.instance(context).play(SoundPlayer.Sound.PLAYER_SHOOT);
@@ -577,5 +641,8 @@ public class RSView extends SurfaceView implements Runnable {
         return false;
     }
 
+    private boolean pressedPause(float x, float y) {
+        return (x >= PAUSE_TLC.x && x <= PAUSE_BRC.x) && (y >= PAUSE_TLC.y && y <= PAUSE_BRC.y);
+    }
 
 }
