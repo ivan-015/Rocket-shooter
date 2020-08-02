@@ -6,8 +6,8 @@ import java.util.zip.CheckedInputStream;
 
 public class Bullet {
 
-    private final static int HEIGHT = 10;
-    private final static int WIDTH = 5;
+    private final static int HEIGHT = 50;
+    private final static int WIDTH = 6;
 
     public static final int DOWN = 1;
     public static final int UP = -1;
@@ -47,6 +47,14 @@ public class Bullet {
 
     public float getY() {
         return y;
+    }
+
+    public static int getHeight() {
+        return HEIGHT;
+    }
+
+    public static int getWidth() {
+        return WIDTH;
     }
 
     public Hitbox getHitbox() {

@@ -44,9 +44,15 @@ public abstract class SpaceObject {
         return speed;
     }
 
-    public void setActive(boolean active) {
-        isActive = active;
-        x = -height * 2;
+    /// Sets the speed of the object
+    public void setSpeed(int speed) {
+        this.speed = speed;
+    }
+
+    public void deactivate() {
+        isActive = false;
+        x = -(width * 2);
+        speed = 0;
     }
 
     /**

@@ -4,8 +4,6 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.graphics.Point;
-import android.graphics.Rect;
 import android.graphics.RectF;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
@@ -18,7 +16,11 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import edu.utep.cs.cs4381.rocketshooter.model.Barrier;
 import edu.utep.cs.cs4381.rocketshooter.model.Bullet;
 import edu.utep.cs.cs4381.rocketshooter.model.Enemy;
+import edu.utep.cs.cs4381.rocketshooter.model.ExtraLife;
 import edu.utep.cs.cs4381.rocketshooter.model.PlayerShip;
+import edu.utep.cs.cs4381.rocketshooter.model.Powerup;
+import edu.utep.cs.cs4381.rocketshooter.model.SoundPlayer;
+import edu.utep.cs.cs4381.rocketshooter.model.SpaceObject;
 import edu.utep.cs.cs4381.rocketshooter.model.Star;
 
 public class RSView extends SurfaceView implements Runnable {
@@ -31,6 +33,7 @@ public class RSView extends SurfaceView implements Runnable {
 
     private boolean isRunning = true;
     private boolean isGameOver = false;
+    private boolean playerWon = false;
 
     private int screenWidth, screenHeight;
 
@@ -41,9 +44,28 @@ public class RSView extends SurfaceView implements Runnable {
     private List<Enemy> enemies;
     private List<Barrier> barriers;
     private List<Star> stars;
+    private List<Powerup> powerups;
 
+    /// Rectangles representing left and right movement buttons
     private RectF LEFT_BUTTON;
     private RectF RIGHT_BUTTON;
+
+    /// Number of enemies that are alive
+    private int activeEnemies;
+    /// Number of enemy rows and columns
+    private final int NUM_ENEMY_ROWS = 4;
+    private final int NUM_ENEMY_COLS = 7;
+
+    /// Number of enemy groups
+    private final int NUM_BARRIER_GROUPS = 3;
+    /// Number of enemy rows inside each group
+    private final int NUM_BARRIER_ROWS = 7;
+    /// Number of enemy columns inside each group
+    private final int NUM_BARRIER_COLS = 8;
+
+    private Random random = new Random();
+
+    private boolean firstTimePlaying = true;
 
     public RSView(Context context, int screenWidth, int screenHeight) {
         super(context);
@@ -58,9 +80,10 @@ public class RSView extends SurfaceView implements Runnable {
         enemies = new CopyOnWriteArrayList<>();
         barriers = new CopyOnWriteArrayList<>();
         stars = new CopyOnWriteArrayList<>();
+        powerups = new CopyOnWriteArrayList<>();
 
-        LEFT_BUTTON = new RectF(10, screenHeight - 250, 300, screenHeight - 80);
-        RIGHT_BUTTON = new RectF(screenWidth - 290, screenHeight - 250, screenWidth - 10, screenHeight - 80);
+        LEFT_BUTTON = new RectF(10, screenHeight * .86f, screenWidth * .32f, screenHeight - 80);
+        RIGHT_BUTTON = new RectF(screenWidth - (screenWidth * .32f), screenHeight * .86f, screenWidth - 10, screenHeight - 80);
 
         start();
     }
@@ -74,16 +97,19 @@ public class RSView extends SurfaceView implements Runnable {
         enemies.clear();
         barriers.clear();
         stars.clear();
+        powerups.clear();
 
 
         player = new PlayerShip(screenWidth / 2 - 100, (int) LEFT_BUTTON.top - 50, screenWidth, screenHeight);
 
         //Create enemies
-        for (int col = 0; col < 4; col++) {
-            for (int row = 0; row < 4; row++) {
-                enemies.add(new Enemy(colIndexToScreen(col), rowIndexToScreen(row), screenWidth, screenHeight));
+        for (int col = 0; col < NUM_ENEMY_COLS; col++) {
+            for (int row = 0; row < NUM_ENEMY_ROWS; row++) {
+                enemies.add(new Enemy(colIndexToScreen(col, Enemy.WIDTH), rowIndexToScreen(row, Enemy.HEIGHT), screenWidth, screenHeight));
             }
         }
+
+        activeEnemies = enemies.size();
 
         //Create stars
         for (int i = 0; i < 60; i++) {
@@ -93,20 +119,32 @@ public class RSView extends SurfaceView implements Runnable {
         }
 
         // Create barriers
-        for (int group = 0; group < 3; group++) {
-            for (int col = 0; col < 4; col++) {
-                for (int row = 0; row < 4; row++) {
-
-                    int x = barrierIndexColToScreen(group, col);
-                    int y = barrierIndexRowToScreen(row);
-                    int width = (screenWidth / 3) / 4;
+        for (int group = 0; group < NUM_BARRIER_GROUPS; group++) {
+            for (int col = 0; col < NUM_BARRIER_COLS; col++) {
+                for (int row = 0; row < NUM_BARRIER_ROWS; row++) {
+                    int width = (screenWidth / NUM_BARRIER_GROUPS) / NUM_BARRIER_COLS - 10;
                     int height = width;
+                    int x = barrierIndexColToScreen(group, col, width);
+                    int y = barrierIndexRowToScreen(row, height);
+
 
                     barriers.add(new Barrier(x, y, screenWidth, screenHeight, width, height));
 
                 }
             }
         }
+
+        isRunning = true;
+
+        // Show instructions on first time playing
+        if (firstTimePlaying) {
+            isGameOver = true;
+        }
+        // Jump straight into the game on subsequent playthroughs
+        else {
+            isGameOver = false;
+        }
+        playerWon = false;
     }
 
     /**
@@ -117,9 +155,9 @@ public class RSView extends SurfaceView implements Runnable {
      * @param index
      * @return
      */
-    private int barrierIndexColToScreen(int group, int index) {
-        int GROUP_WIDTH = screenWidth / 3;
-        return group * GROUP_WIDTH + index * (GROUP_WIDTH / 4);
+    private int barrierIndexColToScreen(int group, int index, int barrierWidth) {
+        int GROUP_WIDTH = screenWidth / NUM_BARRIER_GROUPS;
+        return group * GROUP_WIDTH + index * barrierWidth + 30;
     }
 
     /**
@@ -129,16 +167,16 @@ public class RSView extends SurfaceView implements Runnable {
      * @param index
      * @return
      */
-    private int barrierIndexRowToScreen(int index) {
-        return index * ((screenWidth / 3) / 4) + screenHeight / 2;
+    private int barrierIndexRowToScreen(int index, int barrierHeight) {
+        return screenHeight / 2 + index * barrierHeight;
     }
 
-    private int colIndexToScreen(int index) {
-        return index * 250 + 75;
+    private int colIndexToScreen(int index, int enemyWidth) {
+        return (index * enemyWidth) + (20 * index);
     }
 
-    private int rowIndexToScreen(int index) {
-        return index * 150 + 100;
+    private int rowIndexToScreen(int index, int enemyHeight) {
+        return (index * enemyHeight) + (20 * index) + 100;
     }
 
     @Override
@@ -154,52 +192,102 @@ public class RSView extends SurfaceView implements Runnable {
      * Updates entities and checks for collisions
      */
     private void update() {
-        boolean isHit = false;
+        boolean bounceEnemies = false;
 
         if (!isGameOver) {
+
+            // Update all entities
             player.update();
             for (Star star : stars) {
                 star.update();
             }
             for (Enemy enemy : enemies) {
-                enemy.update();
+                enemy.update(player, context);
+                if (enemy.getHitLimit()) {
+                    bounceEnemies = true;
+                }
             }
             for (Barrier barrier : barriers) {
                 barrier.update();
+            }
+            for (Powerup powerup : powerups) {
+                powerup.update();
+                if (!powerup.isActive()) {
+                    powerups.remove(powerup);
+                }
+            }
+
+            //Check if player intersects with powerup
+            for (Powerup powerup : powerups) {
+                if (player.getHitbox().intersects(powerup.getHitbox())) {
+                    powerup.upgradePlayer(player);
+                    powerup.deactivate();
+                    SoundPlayer.instance(context).play(SoundPlayer.Sound.EXTRA_LIFE);
+                }
             }
 
             // Check if player hit barrier or enemy
             for (Bullet bullet : player.getBullets()) {
                 for (Barrier barrier : barriers) {
+                    // Bullet hit barrier
                     if (bullet.getHitbox().intersects(barrier.getHitbox())) {
                         bullet.hideBullet();
-                        barrier.setActive(false);
+                        barrier.deactivate();
+                        SoundPlayer.instance(context).play(SoundPlayer.Sound.BARRIER_HIT);
                     }
                 }
                 for (Enemy enemy : enemies) {
+
+                    // Bullet hit enemy
                     if (bullet.getHitbox().intersects(enemy.getHitbox())) {
+                        // Random chance to get powerup when enemy is killed
+                        if (random.nextInt(4) == 0) {
+                            powerups.add(new ExtraLife(enemy.getX() + enemy.width / 2,
+                                    enemy.getY() + enemy.height, screenWidth, screenHeight));
+                        }
                         bullet.hideBullet();
-                        enemy.setActive(false);
+                        enemy.deactivate();
+                        player.score += player.getLives() * 100;
+                        SoundPlayer.instance(context).play(SoundPlayer.Sound.ENEMY_EXPLOSION);
+                        activeEnemies--;
+
+
                     }
                 }
 
             }
 
-            // Check if enemy hit barrier or enemy
+            // Check if the player won by eliminating all enemies
+            if (activeEnemies <= 0) {
+                playerWon = true;
+                isGameOver = true;
+                SoundPlayer.instance(context).play(SoundPlayer.Sound.PLAYER_WIN);
+            }
+
+            // Check if enemy hit barrier or player
             for (Enemy enemy : enemies) {
+                if (bounceEnemies) {
+                    enemy.setSpeed(-enemy.getSpeed());
+                }
                 for (Bullet bullet : enemy.getBullets()) {
                     for (Barrier barrier : barriers) {
+                        // Bullet hits barrier
                         if (bullet.getHitbox().intersects(barrier.getHitbox())) {
-                            barrier.setActive(false);
+                            barrier.deactivate();
                             bullet.hideBullet();
+                            SoundPlayer.instance(context).play(SoundPlayer.Sound.BARRIER_HIT);
                         }
                     }
+                    // Bullet hits player
                     if (bullet.getHitbox().intersects(player.getHitbox())) {
+                        bullet.hideBullet();
                         player.takeLife();
+                        SoundPlayer.instance(context).play(SoundPlayer.Sound.PLAYER_EXPLOSION);
                     }
                 }
             }
         }
+        // Check for game over
         if (player.getLives() <= 0) {
             isGameOver = true;
         }
@@ -219,7 +307,7 @@ public class RSView extends SurfaceView implements Runnable {
             drawStars();
 
             //Draw player
-            drawPlayer();
+            drawPlayer(player);
 
             //Draw enemies
             drawEnemies();
@@ -227,21 +315,82 @@ public class RSView extends SurfaceView implements Runnable {
             //Draw barriers
             drawBarriers();
 
+            drawPowerUps();
+
+            drawBullets();
+
             drawButtons();
 
             drawHUD();
 
-            drawBullets();
+
+            // draw winning menu for player
+            if (playerWon) {
+                drawPlayerWon();
+            }
+            // Draw starting menu for player
+            else if (isGameOver && firstTimePlaying) {
+                drawWelcome();
+            }
+            // draw losing menu for player
+            else if (isGameOver) {
+                drawGameOver();
+            }
 
             holder.unlockCanvasAndPost(canvas);
         }
     }
 
+    // Draws instructions for the player's first playthrough
+    private void drawWelcome() {
+        paint.setColor(Color.WHITE);
+        paint.setTextAlign(Paint.Align.CENTER);
+
+        canvas.drawText("Welcome space ranger!", screenWidth / 2, screenHeight / 2 - 250, paint);
+
+        paint.setTextSize(40);
+        canvas.drawText("Press the left or right buttons to move.", screenWidth / 2, screenHeight / 2 - 150, paint);
+        canvas.drawText("Tap anywhere else on the screen to shoot! ", screenWidth / 2, screenHeight / 2 - 50, paint);
+
+    }
+
+    private void drawPowerUps() {
+        for (SpaceObject powerup : powerups) {
+            drawPlayer(powerup);
+        }
+    }
+
+    private void drawGameOver() {
+        paint.setColor(Color.WHITE);
+        paint.setTextAlign(Paint.Align.CENTER);
+        canvas.drawText("Good grief!", screenWidth / 2, screenHeight / 2 - 250, paint);
+        canvas.drawText("The galactic federation has taken over.", screenWidth / 2, screenHeight / 2 - 150, paint);
+        canvas.drawText("Tap to replay!", screenWidth / 2, screenHeight / 2 - 50, paint);
+
+    }
+
+    private void drawPlayerWon() {
+
+        paint.setColor(Color.WHITE);
+        paint.setTextAlign(Paint.Align.CENTER);
+        canvas.drawText("Congratulations!", screenWidth / 2, screenHeight / 2 - 250, paint);
+        canvas.drawText("You beat the evil galactic federation", screenWidth / 2, screenHeight / 2 - 150, paint);
+        canvas.drawText("Tap to replay!", screenWidth / 2, screenHeight / 2 - 50, paint);
+    }
+
     private void drawBullets() {
         List<Bullet> bullets = player.getBullets();
+        // Draw player bullets
         for (Bullet bullet : bullets) {
             paint.setColor(Color.BLUE);
-            canvas.drawRect(bullet.getX(), bullet.getY(), bullet.getX() + 10, bullet.getY() + 10, paint);
+            canvas.drawRect(bullet.getX(), bullet.getY(), bullet.getX() + bullet.getWidth(), bullet.getY() + bullet.getHeight(), paint);
+        }
+        // Draw enemy bullets
+        for (Enemy enemy : enemies) {
+            for (Bullet bullet : enemy.getBullets()) {
+                paint.setARGB(255, 00, 159, 17);
+                canvas.drawRect(bullet.getX(), bullet.getY(), bullet.getX() + bullet.getWidth(), bullet.getY() + bullet.getHeight(), paint);
+            }
         }
     }
 
@@ -252,7 +401,7 @@ public class RSView extends SurfaceView implements Runnable {
         paint.setTextAlign(Paint.Align.RIGHT);
         canvas.drawText("Lives:  " + player.getLives(), screenWidth - 50, 75, paint);
         paint.setTextAlign(Paint.Align.LEFT);
-        canvas.drawText("Score:  0", 50, 75, paint);
+        canvas.drawText("Score:  " + player.score, 50, 75, paint);
     }
 
     private void drawButtons() {
@@ -272,7 +421,7 @@ public class RSView extends SurfaceView implements Runnable {
         }
     }
 
-    private void drawPlayer() {
+    private void drawPlayer(SpaceObject player) {
         paint.setARGB(255, 92, 13, 121);
 
         int squareSize = player.width / 5;
@@ -305,8 +454,39 @@ public class RSView extends SurfaceView implements Runnable {
     private void drawEnemies() {
         paint.setColor(Color.RED);
 
+        int squareSize = enemies.get(0).width / 5;
+
         for (Enemy enemy : enemies) {
-            canvas.drawRect(enemy.getX(), enemy.getY(), enemy.getX() + enemy.width, enemy.getY() + enemy.height, paint);
+            int x = enemy.getX();
+            int y = enemy.getY();
+
+            // Left rectangle of enemy (Left ear)
+            canvas.drawRect(x, y, x + squareSize,
+                    y + enemy.height - squareSize, paint);
+
+            // Right rectangle of enemy (Right ear)
+            canvas.drawRect(x + enemy.width - squareSize, y, x + enemy.width,
+                    y + enemy.height - squareSize, paint);
+
+            // Top horizontal rectangle
+            canvas.drawRect(x + squareSize, y + squareSize,
+                    x + enemy.width - squareSize, y + squareSize * 2, paint);
+
+            // Bottom horizontal rectangle
+            canvas.drawRect(x + squareSize, y + squareSize * 3,
+                    x + enemy.width - squareSize, y + enemy.height - squareSize, paint);
+
+            // Middle square
+            canvas.drawRect(x + squareSize * 2, y + squareSize * 2,
+                    x + squareSize * 3, y + squareSize * 3, paint);
+
+            // Left fang
+            canvas.drawRect(x + squareSize, y + enemy.height - squareSize,
+                    x + squareSize * 2, y + enemy.height, paint);
+
+            // Right fang
+            canvas.drawRect(x + squareSize * 3, y + enemy.height - squareSize,
+                    x + enemy.width - squareSize, y + enemy.height, paint);
         }
     }
 
@@ -317,9 +497,10 @@ public class RSView extends SurfaceView implements Runnable {
             paint.setStyle(Paint.Style.FILL);
             canvas.drawRect(b.getX(), b.getY(), b.getX() + b.width, b.getY() + b.height, paint);
 
-            paint.setColor(Color.BLACK);
-            paint.setStyle(Paint.Style.STROKE);
-            canvas.drawRect(b.getX(), b.getY(), b.getX() + b.width, b.getY() + b.height, paint);
+            // For debugging where each barrier is
+//            paint.setColor(Color.BLACK);
+//            paint.setStyle(Paint.Style.STROKE);
+//            canvas.drawRect(b.getX(), b.getY(), b.getX() + b.width, b.getY() + b.height, paint);
         }
         paint.setStyle(Paint.Style.FILL);
     }
@@ -353,8 +534,15 @@ public class RSView extends SurfaceView implements Runnable {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
 //                detectLeftRightButton(event.getX(), event.getY());
-                if (!detectLeftRightButton(event.getX(), event.getY())) {
-                    player.shoot(Bullet.UP);
+                if (!detectLeftRightButton(event.getX(), event.getY()) && !isGameOver) {
+                    if (player.shoot(Bullet.UP)) {
+                        SoundPlayer.instance(context).play(SoundPlayer.Sound.PLAYER_SHOOT);
+                    }
+                } else if (isGameOver && firstTimePlaying) {
+                    isGameOver = false;
+                    firstTimePlaying = false;
+                } else if (isGameOver) {
+                    start();
                 }
                 break;
             case MotionEvent.ACTION_UP:
